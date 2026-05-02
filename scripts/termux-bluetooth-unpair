@@ -1,0 +1,15 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-bluetooth-unpair - Unpair a Bluetooth device
+# Usage: termux-bluetooth-unpair MAC_ADDRESS
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+if [ -z "$ADDRESS" ]; then
+    echo "Usage: termux-bluetooth-unpair MAC_ADDRESS"
+    exit 1
+fi
+
+REQUEST_ID="bt_unpair_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"bt.unpair","params":{"address":"'$ADDRESS'"}}'
+send_command "$JSON" | pretty_json

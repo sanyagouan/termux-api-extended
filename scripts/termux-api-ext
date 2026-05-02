@@ -1,0 +1,102 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-api-ext — Core TCP communication library for Termux API Extended
+# Source this file or use the send_command function
+
+TERMUX_API_EXT_PORT="${TERMUX_API_EXT_PORT:-8080}"
+TERMUX_API_EXT_HOST="127.0.0.1"
+TERMUX_API_EXT_TIMEOUT="${TERMUX_API_EXT_TIMEOUT:-30}"
+
+# Send a JSON command to the Termux API Extended server and return the response
+send_command() {
+    local json="$1"
+    local port="$TERMUX_API_EXT_PORT"
+    local host="$TERMUX_API_EXT_HOST"
+    local timeout="$TERMUX_API_EXT_TIMEOUT"
+
+    if command -v nc > /dev/null 2>&1; then
+        # Use netcat if available
+        printf '%s\n' "$json" | nc -w "$timeout" "$host" "$port" 2>/dev/null
+    elif command -v ncat > /dev/null 2>&1; then
+        printf '%s\n' "$json" | ncat -w "$timeout" "$host" "$port" 2>/dev/null
+    elif command -v socat > /dev/null 2>&1; then
+        printf '%s\n' "$json" | socat -T "$timeout" TCP:"$host":"$port" 2>/dev/null
+    elif command -v python3 > /dev/null 2>&1; then
+        # Python fallback (always available in Termux)
+        python3 -c "
+import socket, sys, json
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.settimeout($timeout)
+    s.connect(('$host', $port))
+    s.sendall(sys.argv[1].encode() + b'\n')
+    data = b''
+    while True:
+        chunk = s.recv(4096)
+        if not chunk:
+            break
+        data += chunk
+        if b'\n' in data:
+            break
+    s.close()
+    print(data.decode().strip())
+except Exception as e:
+    print(json.dumps({'status':'error','error':{'code':'CONNECTION_FAILED','message':str(e)}}))
+" "$json"
+    else
+        echo '{"status":"error","error":{"code":"NO_CLIENT","message":"No TCP client available. Install netcat or ncat."}}'
+        return 1
+    fi
+}
+
+# Pretty-print JSON response
+pretty_json() {
+    if command -v jq > /dev/null 2>&1; then
+        jq '.' 2>/dev/null
+    elif command -v python3 > /dev/null 2>&1; then
+        python3 -c "import sys,json; print(json.dumps(json.loads(sys.stdin.read()),indent=2))"
+    else
+        cat
+    fi
+}
+
+# Extract a field from JSON response
+json_field() {
+    local field="$1"
+    python3 -c "
+import sys,json
+data=json.loads(sys.stdin.read())
+keys='$field'.split('.')
+val=data
+for k in keys:
+    if isinstance(val,dict):
+        val=val.get(k)
+    elif isinstance(val,list):
+        try: val=val[int(k)]
+        except: val=None
+    else:
+        val=None
+    if val is None:
+        break
+print(val if val is not None else '')
+"
+}
+
+# Check if server is running
+check_server() {
+    local port="$TERMUX_API_EXT_PORT"
+    if command -v nc > /dev/null 2>&1; then
+        nc -z -w2 127.0.0.1 "$port" 2>/dev/null
+    elif command -v python3 > /dev/null 2>&1; then
+        python3 -c "
+import socket
+s=socket.socket()
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1',$port))
+    s.close()
+    exit(0)
+except:
+    exit(1)
+"
+    fi
+}

@@ -1,0 +1,26 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-bluetooth-enable - Enable or disable Bluetooth
+# Usage: termux-bluetooth-enable [on|off]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ACTION="${1:-status}"
+REQUEST_ID="bt_en_$(date +%s%N)"
+
+case "$ACTION" in
+    on|enable)
+        JSON='{"id":"'$REQUEST_ID'","method":"bt.enable","params":{}}'
+        ;;
+    off|disable)
+        JSON='{"id":"'$REQUEST_ID'","method":"bt.disable","params":{}}'
+        ;;
+    status)
+        JSON='{"id":"'$REQUEST_ID'","method":"bt.status","params":{}}'
+        ;;
+    *)
+        echo "Usage: termux-bluetooth-enable [on|off|status]"
+        exit 1
+        ;;
+esac
+
+send_command "$JSON" | pretty_json

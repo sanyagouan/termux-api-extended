@@ -1,0 +1,15 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-forget - Remove a saved WiFi network
+# Usage: termux-wifi-forget SSID
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+SSID="$1"
+if [ -z "$SSID" ]; then
+    echo "Usage: termux-wifi-forget SSID"
+    exit 1
+fi
+
+REQUEST_ID="wifi_forget_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"wifi.forget","params":{"ssid":"'$SSID'"}}'
+send_command "$JSON" | pretty_json

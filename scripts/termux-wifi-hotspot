@@ -1,0 +1,41 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-hotspot - Manage WiFi hotspot
+# Usage: termux-wifi-hotspot [enable|disable|status|clients] [options]
+#   enable [-s SSID] [-p PASSWORD] [-b BAND]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ACTION="${1:-status}"
+REQUEST_ID="hotspot_$(date +%s%N)"
+
+case "$ACTION" in
+    enable)
+        HSSID="TermuxHotspot"
+        HPASS=""
+        HBAND="2.4"
+        shift
+        while [ $# -gt 0 ]; do
+            case "$1" in
+                -s) HSSID="$2"; shift 2 ;;
+                -p) HPASS="$2"; shift 2 ;;
+                -b) HBAND="$2"; shift 2 ;;
+            esac
+        done
+        JSON='{"id":"'$REQUEST_ID'","method":"hotspot.enable","params":{"ssid":"'$HSSID'","password":"'$HPASS'","band":"'$HBAND'"}}'
+        ;;
+    disable)
+        JSON='{"id":"'$REQUEST_ID'","method":"hotspot.disable","params":{}}'
+        ;;
+    status)
+        JSON='{"id":"'$REQUEST_ID'","method":"hotspot.status","params":{}}'
+        ;;
+    clients)
+        JSON='{"id":"'$REQUEST_ID'","method":"hotspot.clients","params":{}}'
+        ;;
+    *)
+        echo "Usage: termux-wifi-hotspot [enable|disable|status|clients]"
+        exit 1
+        ;;
+esac
+
+send_command "$JSON" | pretty_json

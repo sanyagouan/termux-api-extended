@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-config - IP/DNS/Gateway configuration
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+REQUEST_ID="wifi_cfg_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"wifi.config","params":{}}'
+send_command "$JSON" | pretty_json

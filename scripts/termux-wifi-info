@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-info - Current WiFi connection details
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+REQUEST_ID="wifi_info_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"wifi.networks.info","params":{}}'
+send_command "$JSON" | pretty_json

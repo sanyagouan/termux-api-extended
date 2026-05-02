@@ -1,0 +1,15 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-ble-connect - Connect to a BLE device
+# Usage: termux-ble-connect MAC_ADDRESS
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+if [ -z "$ADDRESS" ]; then
+    echo "Usage: termux-ble-connect MAC_ADDRESS"
+    exit 1
+fi
+
+REQUEST_ID="ble_conn_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"ble.connect","params":{"address":"'$ADDRESS'"}}'
+send_command "$JSON" | pretty_json

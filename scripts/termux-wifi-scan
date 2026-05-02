@@ -1,0 +1,15 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-scan - Enhanced WiFi scan with full details
+# Usage: termux-wifi-scan [SSID_FILTER]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+REQUEST_ID="wifi_scan_$(date +%s%N)"
+FILTER=""
+if [ -n "$1" ]; then
+    FILTER='"ssid_filter":"'$1'",'
+fi
+
+JSON='{"id":"'$REQUEST_ID'","method":"wifi.networks.scan","params":{'$FILTER'}}'
+RESP=$(send_command "$JSON")
+echo "$RESP" | pretty_json

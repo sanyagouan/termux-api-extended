@@ -1,0 +1,15 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-bluetooth-pair - Pair with a Bluetooth device
+# Usage: termux-bluetooth-pair MAC_ADDRESS
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+if [ -z "$ADDRESS" ]; then
+    echo "Usage: termux-bluetooth-pair MAC_ADDRESS"
+    exit 1
+fi
+
+REQUEST_ID="bt_pair_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"bt.pair","params":{"address":"'$ADDRESS'"}}'
+send_command "$JSON" | pretty_json

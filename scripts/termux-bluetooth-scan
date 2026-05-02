@@ -1,0 +1,22 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-bluetooth-scan - Scan for Bluetooth devices
+# Usage: termux-bluetooth-scan [-d DURATION] [-u UUID_FILTER]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+DURATION=10
+UUID_FILTER=""
+
+while getopts "d:u:" opt; do
+    case $opt in
+        d) DURATION="$OPTARG" ;;
+        u) UUID_FILTER="$OPTARG" ;;
+    esac
+done
+
+REQUEST_ID="bt_scan_$(date +%s%N)"
+FILTER=""
+[ -n "$UUID_FILTER" ] && FILTER='"uuid_filter":"'$UUID_FILTER'",'
+
+JSON='{"id":"'$REQUEST_ID'","method":"bt.scan","params":{'$FILTER'"duration":'$DURATION'}}'
+send_command "$JSON" | pretty_json

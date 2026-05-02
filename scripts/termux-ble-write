@@ -1,0 +1,20 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-ble-write - Write to a BLE characteristic
+# Usage: termux-ble-write MAC_ADDRESS SERVICE_UUID CHARACTERISTIC_UUID HEX_VALUE
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+SVC_UUID="$2"
+CHR_UUID="$3"
+VALUE="$4"
+
+if [ -z "$ADDRESS" ] || [ -z "$SVC_UUID" ] || [ -z "$CHR_UUID" ] || [ -z "$VALUE" ]; then
+    echo "Usage: termux-ble-write MAC_ADDRESS SERVICE_UUID CHARACTERISTIC_UUID HEX_VALUE"
+    echo "Example: termux-ble-write AA:BB:CC:DD:EE:FF 0000ffe0-... 0000ffe1-... ff01"
+    exit 1
+fi
+
+REQUEST_ID="ble_write_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"ble.write","params":{"address":"'$ADDRESS'","service_uuid":"'$SVC_UUID'","characteristic_uuid":"'$CHR_UUID'","value":"'$VALUE'"}}'
+send_command "$JSON" | pretty_json

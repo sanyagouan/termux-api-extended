@@ -1,0 +1,22 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-ble-notify - Subscribe to BLE characteristic notifications
+# Usage: termux-ble-notify MAC_ADDRESS SERVICE_UUID CHARACTERISTIC_UUID [on|off]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+SVC_UUID="$2"
+CHR_UUID="$3"
+ENABLE="${4:-on}"
+
+if [ -z "$ADDRESS" ] || [ -z "$SVC_UUID" ] || [ -z "$CHR_UUID" ]; then
+    echo "Usage: termux-ble-notify MAC_ADDRESS SERVICE_UUID CHARACTERISTIC_UUID [on|off]"
+    exit 1
+fi
+
+REQUEST_ID="ble_notify_$(date +%s%N)"
+ENB="true"
+[ "$ENABLE" = "off" ] && ENB="false"
+
+JSON='{"id":"'$REQUEST_ID'","method":"ble.notify","params":{"address":"'$ADDRESS'","service_uuid":"'$SVC_UUID'","characteristic_uuid":"'$CHR_UUID'","enable":'$ENB'}}'
+send_command "$JSON" | pretty_json

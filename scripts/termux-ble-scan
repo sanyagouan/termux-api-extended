@@ -1,0 +1,16 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-ble-scan - Scan for BLE devices
+# Usage: termux-ble-scan [-d DURATION]
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+DURATION=10
+while getopts "d:" opt; do
+    case $opt in
+        d) DURATION="$OPTARG" ;;
+    esac
+done
+
+REQUEST_ID="ble_scan_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"ble.scan","params":{"duration":'$DURATION'}}'
+send_command "$JSON" | pretty_json

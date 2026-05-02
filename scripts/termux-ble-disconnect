@@ -1,0 +1,14 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-ble-disconnect - Disconnect from BLE device
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+ADDRESS="$1"
+if [ -z "$ADDRESS" ]; then
+    echo "Usage: termux-ble-disconnect MAC_ADDRESS"
+    exit 1
+fi
+
+REQUEST_ID="ble_disc_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"ble.disconnect","params":{"address":"'$ADDRESS'"}}'
+send_command "$JSON" | pretty_json

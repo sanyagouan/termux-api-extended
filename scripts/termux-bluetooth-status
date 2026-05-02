@@ -1,0 +1,8 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-bluetooth-status - Bluetooth adapter status
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+REQUEST_ID="bt_status_$(date +%s%N)"
+JSON='{"id":"'$REQUEST_ID'","method":"bt.status","params":{}}'
+send_command "$JSON" | pretty_json

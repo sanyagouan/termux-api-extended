@@ -1,0 +1,39 @@
+#!/data/data/com.termux/files/usr/bin/sh
+# termux-wifi-connect - Connect to a WiFi network
+# Usage: termux-wifi-connect [-s SSID] [-p PASSWORD] [-t SECURITY] [-H]
+#   -s SSID      Network name
+#   -p PASSWORD  WPA2/WPA3 password
+#   -t SECURITY  Security type: WPA2 (default), WPA3, OPEN
+#   -H           Hidden network
+# Examples:
+#   termux-wifi-connect -s "MyWiFi" -p "password123"
+#   termux-wifi-connect -s "OpenCafe" -t OPEN
+
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
+. "$SCRIPT_DIR/termux-api-ext"
+
+SSID=""
+PASSWORD=""
+SECURITY="WPA2"
+HIDDEN="false"
+
+while getopts "s:p:t:H" opt; do
+    case $opt in
+        s) SSID="$OPTARG" ;;
+        p) PASSWORD="$OPTARG" ;;
+        t) SECURITY="$OPTARG" ;;
+        H) HIDDEN="true" ;;
+    esac
+done
+
+if [ -z "$SSID" ]; then
+    echo "Error: SSID is required. Use -s option."
+    echo "Usage: termux-wifi-connect -s SSID [-p PASSWORD] [-t SECURITY] [-H]"
+    exit 1
+fi
+
+REQUEST_ID="wifi_connect_$(date +%s%N)"
+
+JSON="{\"id\":\"$REQUEST_ID\",\"method\":\"wifi.connect\",\"params\":{\"ssid\":\"$SSID\",\"password\":\"$PASSWORD\",\"security\":\"$SECURITY\",\"hidden\":$HIDDEN}}"
+
+send_command "$JSON" | pretty_json
