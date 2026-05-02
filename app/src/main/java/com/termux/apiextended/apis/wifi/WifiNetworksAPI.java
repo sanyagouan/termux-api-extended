@@ -258,7 +258,7 @@ public class WifiNetworksAPI implements IApiModule {
             case ScanResult.CHANNEL_WIDTH_20MHZ: return "20 MHz";
             case ScanResult.CHANNEL_WIDTH_40MHZ: return "40 MHz";
             case ScanResult.CHANNEL_WIDTH_80MHZ: return "80 MHz";
-            case 3: return "80+80 MHz"; // CHANNEL_WIDTH_80PLUS_MHZ (hidden API)
+            case 4: return "80+80 MHz"; // CHANNEL_WIDTH_80PLUS_MHZ (hidden API, value=4)
             case ScanResult.CHANNEL_WIDTH_160MHZ: return "160 MHz";
             case ScanResult.CHANNEL_WIDTH_320MHZ: return "320 MHz";
             default: return "unknown";
