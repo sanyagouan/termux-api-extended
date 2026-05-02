@@ -5,6 +5,8 @@ import android.net.wifi.p2p.WifiP2pManager;
 import android.util.Log;
 
 import com.termux.apiextended.util.PermissionManager;
+import com.termux.apiextended.CommandDispatcher;
+import com.termux.apiextended.IApiModule;
 
 import java.util.ArrayList;
 import java.util.List;

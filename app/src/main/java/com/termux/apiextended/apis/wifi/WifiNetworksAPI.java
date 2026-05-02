@@ -9,6 +9,7 @@ import android.net.wifi.WifiManager;
 import android.text.TextUtils;
 
 import com.termux.apiextended.IApiModule;
+import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
 import java.util.Collections;

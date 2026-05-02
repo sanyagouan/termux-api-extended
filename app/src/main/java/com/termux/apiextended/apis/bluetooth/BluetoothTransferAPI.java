@@ -8,6 +8,7 @@ import android.content.Context;
 import android.util.Log;
 
 import com.termux.apiextended.IApiModule;
+import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
 import java.io.IOException;

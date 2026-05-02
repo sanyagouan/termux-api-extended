@@ -5,6 +5,7 @@ import android.net.wifi.WifiManager;
 import android.os.Build;
 
 import com.termux.apiextended.IApiModule;
+import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
 import java.lang.reflect.Method;

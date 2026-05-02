@@ -7,6 +7,7 @@ import android.content.Context;
 import android.media.AudioManager;
 
 import com.termux.apiextended.IApiModule;
+import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
 import java.util.List;

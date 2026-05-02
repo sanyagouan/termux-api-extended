@@ -7,6 +7,8 @@ import android.net.wifi.WifiNetworkSuggestion;
 import android.os.Build;
 
 import com.termux.apiextended.util.PermissionManager;
+import com.termux.apiextended.CommandDispatcher;
+import com.termux.apiextended.IApiModule;
 
 import java.util.List;
 
