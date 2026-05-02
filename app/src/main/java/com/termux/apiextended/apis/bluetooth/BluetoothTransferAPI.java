@@ -11,9 +11,12 @@ import com.termux.apiextended.IApiModule;
 import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
+import android.content.Intent;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 import java.util.UUID;
 
 /**

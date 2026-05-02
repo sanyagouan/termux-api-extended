@@ -83,7 +83,7 @@ public class WifiHotspotAPI implements IApiModule {
             @Override
             public void onStarted(WifiManager.LocalOnlyHotspotReservation reservation) {}
             @Override
-            public void onStopped(int reason) {}
+            public void onStopped() {}
             @Override
             public void onFailed(int reason) {}
         }, null);

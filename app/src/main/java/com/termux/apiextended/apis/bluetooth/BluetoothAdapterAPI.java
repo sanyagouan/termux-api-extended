@@ -63,7 +63,7 @@ public class BluetoothAdapterAPI implements IApiModule {
             case "disable":
                 return doDisable(requestId, adapter);
             case "status":
-                return doStatus(requestId, adapter);
+                return doStatus(context, requestId, adapter);
             case "discoverable":
                 return doDiscoverable(context, requestId, params, adapter);
             case "scan":
@@ -127,7 +127,7 @@ public class BluetoothAdapterAPI implements IApiModule {
     /**
      * Get Bluetooth adapter status and info.
      */
-    private String doStatus(String id, BluetoothAdapter adapter) {
+    private String doStatus(Context context, String id, BluetoothAdapter adapter) {
         String name;
         String address;
         int state;

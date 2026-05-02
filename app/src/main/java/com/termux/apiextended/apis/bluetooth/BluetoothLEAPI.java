@@ -599,11 +599,18 @@ public class BluetoothLEAPI implements IApiModule {
             Thread.sleep(2000);
             boolean written;
             if (withResponse) {
-                written = newGatt.writeCharacteristic(characteristic);
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    int result_code = newGatt.writeCharacteristic(characteristic, bytes,
+                            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT);
+                    written = (result_code == android.bluetooth.BluetoothGatt.GATT_SUCCESS);
+                } else {
+                    written = newGatt.writeCharacteristic(characteristic);
+                }
             } else {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    written = newGatt.writeCharacteristic(characteristic, bytes,
+                    int result_code = newGatt.writeCharacteristic(characteristic, bytes,
                             BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
+                    written = (result_code == android.bluetooth.BluetoothGatt.GATT_SUCCESS);
                 } else {
                     characteristic.setWriteType(BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE);
                     written = newGatt.writeCharacteristic(characteristic);

@@ -1,4 +1,4 @@
-package com.termux.apiextended;
+package com.termux.apiextended.apis.wifi;
 
 import android.content.Context;
 import android.net.wifi.p2p.WifiP2pManager;

@@ -1,4 +1,4 @@
-package com.termux.apiextended;
+package com.termux.apiextended.apis.wifi;
 
 import android.content.Context;
 import android.net.DhcpInfo;

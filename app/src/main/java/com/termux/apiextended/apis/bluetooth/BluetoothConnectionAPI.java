@@ -157,7 +157,7 @@ public class BluetoothConnectionAPI implements IApiModule {
         try {
             java.lang.reflect.Method connectMethod =
                     BluetoothDevice.class.getMethod("connect", int.class);
-            boolean result = (Boolean) connectMethod.invoke(device, BluetoothProfile.TRANSPORT_AUTO);
+            boolean result = (Boolean) connectMethod.invoke(device, 7 /* TRANSPORT_AUTO */);
 
             return CommandDispatcher.buildResponse(id,
                 "{\"address\":\"" + device.getAddress() + "\","
@@ -445,7 +445,11 @@ public class BluetoothConnectionAPI implements IApiModule {
 
         void close() {
             if (profile != null) {
-                try { profile.close(); } catch (Exception ignored) {}
+                try {
+                    // BluetoothProfile is an interface; actual proxies may have close()
+                    java.lang.reflect.Method closeMethod = profile.getClass().getMethod("close");
+                    closeMethod.invoke(profile);
+                } catch (Exception ignored) {}
             }
         }
 

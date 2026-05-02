@@ -240,7 +240,10 @@ public class BluetoothAudioAPI implements IApiModule {
 
         void close() {
             if (profile != null) {
-                try { profile.close(); } catch (Exception ignored) {}
+                try {
+                    java.lang.reflect.Method closeMethod = profile.getClass().getMethod("close");
+                    closeMethod.invoke(profile);
+                } catch (Exception ignored) {}
             }
         }
 
