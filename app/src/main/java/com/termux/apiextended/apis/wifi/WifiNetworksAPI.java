@@ -3,7 +3,6 @@ package com.termux.apiextended.apis.wifi;
 import android.content.Context;
 import android.net.DhcpInfo;
 import android.net.wifi.ScanResult;
-import android.net.wifi.WifiConfiguration;
 import android.net.wifi.WifiInfo;
 import android.net.wifi.WifiManager;
 import android.text.TextUtils;
@@ -12,6 +11,7 @@ import com.termux.apiextended.IApiModule;
 import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
+import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.List;
 
@@ -20,9 +20,11 @@ import java.util.List;
  *
  * Methods:
  *   scan      — Scan visible networks (enhanced with security, channel, band info)
- *   saved     — List saved/configured networks
+ *   saved     — List saved/configured networks (legacy only, API <29)
  *   info      — Detailed current connection info
  *   signals   — One-shot signal strength reading
+ *
+ * WifiConfiguration accessed via reflection since it was removed from SDK 30+.
  */
 public class WifiNetworksAPI implements IApiModule {
 
@@ -51,13 +53,8 @@ public class WifiNetworksAPI implements IApiModule {
         }
     }
 
-    /**
-     * Enhanced WiFi scan with full details per network.
-     */
     private String doScan(Context context, String id, String params) {
         WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-
-        // Trigger a fresh scan
         wm.startScan();
 
         List<ScanResult> results = wm.getScanResults();
@@ -66,10 +63,8 @@ public class WifiNetworksAPI implements IApiModule {
                     "No networks found. Ensure location is enabled.");
         }
 
-        // Sort by signal strength (strongest first)
         Collections.sort(results, (a, b) -> b.level - a.level);
 
-        // Optional SSID filter
         String filterSsid = CommandDispatcher.extractString(params, "ssid_filter");
 
         StringBuilder sb = new StringBuilder();
@@ -91,7 +86,6 @@ public class WifiNetworksAPI implements IApiModule {
             sb.append("\"band\":\"").append(frequencyToBand(scan.frequency)).append("\",");
             sb.append("\"channel_width\":\"").append(channelWidthString(scan.channelWidth)).append("\",");
 
-            // Parse capabilities
             String caps = scan.capabilities != null ? scan.capabilities : "";
             sb.append("\"security\":[");
             if (caps.contains("WPA3")) sb.append("\"WPA3\"");
@@ -108,7 +102,6 @@ public class WifiNetworksAPI implements IApiModule {
             sb.append("\"encrypted\":").append(!caps.contains("ESS") || caps.length() > 4).append(",");
             sb.append("\"hidden\":").append(scan.SSID.isEmpty()).append(",");
 
-            // Signal quality percentage (rough estimate)
             int quality = Math.max(0, Math.min(100, scan.level + 100));
             sb.append("\"quality_percent\":").append(quality).append(",");
 
@@ -127,46 +120,64 @@ public class WifiNetworksAPI implements IApiModule {
     }
 
     /**
-     * List all saved/configured WiFi networks.
+     * List saved networks. Uses reflection for WifiConfiguration (removed from SDK 30+).
+     * Only works on pre-Android 10 devices.
      */
     @SuppressWarnings("deprecation")
     private String doSaved(Context context, String id) {
         WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
-        List<WifiConfiguration> configs = wm.getConfiguredNetworks();
 
-        if (configs == null || configs.isEmpty()) {
-            return CommandDispatcher.buildResponse(id, "{\"networks\":[],\"count\":0}");
+        try {
+            Method getConfiguredNetworks = WifiManager.class.getMethod("getConfiguredNetworks");
+            @SuppressWarnings("unchecked")
+            java.util.List<?> configs = (java.util.List<?>) getConfiguredNetworks.invoke(wm);
+
+            if (configs == null || configs.isEmpty()) {
+                return CommandDispatcher.buildResponse(id, "{\"networks\":[],\"count\":0}");
+            }
+
+            Class<?> wcClass = Class.forName("android.net.wifi.WifiConfiguration");
+
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object cfg : configs) {
+                if (!first) sb.append(",");
+                first = false;
+
+                String ssid = (String) wcClass.getField("SSID").get(cfg);
+                if (ssid == null) ssid = "unknown";
+                else ssid = ssid.replace("\"", "");
+
+                int networkId = wcClass.getField("networkId").getInt(cfg);
+                boolean hiddenSSID = wcClass.getField("hiddenSSID").getBoolean(cfg);
+                int priority = wcClass.getField("priority").getInt(cfg);
+                int status = wcClass.getField("status").getInt(cfg);
+
+                String keyMgmt = keyMgmtToString(wcClass, cfg);
+                String statusStr = configStatusToString(status);
+
+                sb.append("{");
+                sb.append("\"network_id\":").append(networkId).append(",");
+                sb.append("\"ssid\":\"").append(PermissionManager.escapeJson(ssid)).append("\",");
+                sb.append("\"security\":\"").append(keyMgmt).append("\",");
+                sb.append("\"status\":\"").append(statusStr).append("\",");
+                sb.append("\"hidden\":").append(hiddenSSID).append(",");
+                sb.append("\"priority\":").append(priority);
+                sb.append("}");
+            }
+            sb.append("]");
+
+            return CommandDispatcher.buildResponse(id,
+                "{\"networks\":" + sb.toString() + ","
+              + "\"count\":" + configs.size() + "}");
+
+        } catch (Exception e) {
+            return CommandDispatcher.buildError(id, "SAVED_FAILED",
+                    "Cannot read saved networks: " + e.getMessage()
+                  + ". On Android 10+, saved networks are not accessible to non-system apps.");
         }
-
-        StringBuilder sb = new StringBuilder("[");
-        boolean first = true;
-        for (WifiConfiguration cfg : configs) {
-            if (!first) sb.append(",");
-            first = false;
-
-            String ssid = cfg.SSID != null ? cfg.SSID.replace("\"", "") : "unknown";
-            String keyMgmt = cfg.allowedKeyManagement != null ? keyMgmtToString(cfg) : "UNKNOWN";
-            String status = configStatusToString(cfg.status);
-
-            sb.append("{");
-            sb.append("\"network_id\":").append(cfg.networkId).append(",");
-            sb.append("\"ssid\":\"").append(PermissionManager.escapeJson(ssid)).append("\",");
-            sb.append("\"security\":\"").append(keyMgmt).append("\",");
-            sb.append("\"status\":\"").append(status).append("\",");
-            sb.append("\"hidden\":").append(cfg.hiddenSSID).append(",");
-            sb.append("\"priority\":").append(cfg.priority);
-            sb.append("}");
-        }
-        sb.append("]");
-
-        return CommandDispatcher.buildResponse(id,
-            "{\"networks\":" + sb.toString() + ","
-          + "\"count\":" + configs.size() + "}");
     }
 
-    /**
-     * Detailed current connection info.
-     */
     @SuppressWarnings("deprecation")
     private String doInfo(Context context, String id) {
         WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
@@ -189,7 +200,6 @@ public class WifiNetworksAPI implements IApiModule {
         else if (rssi >= -70) signalLevel = "fair";
         else signalLevel = "weak";
 
-        // Get DHCP info
         DhcpInfo dhcp = wm.getDhcpInfo();
         String ip = intToIp(dhcp.ipAddress);
         String gateway = intToIp(dhcp.gateway);
@@ -211,9 +221,6 @@ public class WifiNetworksAPI implements IApiModule {
           + "\"mac_address\":\"" + PermissionManager.escapeJson(info.getMacAddress()) + "\"}");
     }
 
-    /**
-     * One-shot signal reading (RSSI, link speed, noise).
-     */
     @SuppressWarnings("deprecation")
     private String doSignals(Context context, String id) {
         WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
@@ -221,7 +228,6 @@ public class WifiNetworksAPI implements IApiModule {
         int rssi = info.getRssi();
         int speed = info.getLinkSpeed();
 
-        // Trigger scan for additional data
         wm.startScan();
 
         return CommandDispatcher.buildResponse(id,
@@ -252,30 +258,46 @@ public class WifiNetworksAPI implements IApiModule {
             case ScanResult.CHANNEL_WIDTH_20MHZ: return "20 MHz";
             case ScanResult.CHANNEL_WIDTH_40MHZ: return "40 MHz";
             case ScanResult.CHANNEL_WIDTH_80MHZ: return "80 MHz";
-            case ScanResult.CHANNEL_WIDTH_80PLUS_MHZ: return "80+80 MHz";
+            case ScanResult.CHANNEL_WIDTH_80_PLUS_MHZ: return "80+80 MHz";
             case ScanResult.CHANNEL_WIDTH_160MHZ: return "160 MHz";
             case ScanResult.CHANNEL_WIDTH_320MHZ: return "320 MHz";
             default: return "unknown";
         }
     }
 
-    @SuppressWarnings("deprecation")
-    private static String keyMgmtToString(WifiConfiguration cfg) {
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA3_SAE)) return "WPA3";
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA2_PSK)) return "WPA2";
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA_PSK)) return "WPA";
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.WPA_EAP)) return "WPA_EAP";
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.IEEE8021X)) return "IEEE8021X";
-        if (cfg.allowedKeyManagement.get(WifiConfiguration.KeyMgmt.NONE)) return "OPEN";
+    /**
+     * Determine key management type via reflection on WifiConfiguration.
+     */
+    private static String keyMgmtToString(Class<?> wcClass, Object cfg) {
+        try {
+            Class<?> kmClass = Class.forName("android.net.wifi.WifiConfiguration$KeyMgmt");
+            Object allowedKM = wcClass.getField("allowedKeyManagement").get(cfg);
+
+            // Check in order of specificity
+            int wpa3sae = kmClass.getField("WPA3_SAE").getInt(null);
+            int wpa2psk = kmClass.getField("WPA2_PSK").getInt(null);
+            int wpaPsk = kmClass.getField("WPA_PSK").getInt(null);
+            int wpaEap = kmClass.getField("WPA_EAP").getInt(null);
+            int ieee8021x = kmClass.getField("IEEE8021X").getInt(null);
+            int none = kmClass.getField("NONE").getInt(null);
+
+            java.util.BitSet bs = (java.util.BitSet) allowedKM;
+            if (bs.get(wpa3sae)) return "WPA3";
+            if (bs.get(wpa2psk)) return "WPA2";
+            if (bs.get(wpaPsk)) return "WPA";
+            if (bs.get(wpaEap)) return "WPA_EAP";
+            if (bs.get(ieee8021x)) return "IEEE8021X";
+            if (bs.get(none)) return "OPEN";
+        } catch (Exception ignored) {}
         return "UNKNOWN";
     }
 
-    @SuppressWarnings("deprecation")
     private static String configStatusToString(int status) {
+        // WifiConfiguration.Status constants: CURRENT=0, DISABLED=1, ENABLED=2
         switch (status) {
-            case WifiConfiguration.Status.CURRENT: return "connected";
-            case WifiConfiguration.Status.ENABLED: return "enabled";
-            case WifiConfiguration.Status.DISABLED: return "disabled";
+            case 0: return "connected";
+            case 2: return "enabled";
+            case 1: return "disabled";
             default: return "unknown";
         }
     }

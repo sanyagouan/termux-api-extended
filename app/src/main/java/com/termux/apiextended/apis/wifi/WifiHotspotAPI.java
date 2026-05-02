@@ -1,6 +1,7 @@
 package com.termux.apiextended.apis.wifi;
 
 import android.content.Context;
+import android.net.DhcpInfo;
 import android.net.wifi.WifiManager;
 import android.os.Build;
 
@@ -9,6 +10,7 @@ import com.termux.apiextended.CommandDispatcher;
 import com.termux.apiextended.util.PermissionManager;
 
 import java.lang.reflect.Method;
+import java.util.List;
 
 /**
  * WiFi Hotspot API — Manage WiFi tethering/hotspot.
@@ -19,9 +21,9 @@ import java.lang.reflect.Method;
  *   status   — Current hotspot state
  *   clients  — List connected clients (where available)
  *
- * Note: Hotspot control requires CHANGE_NETWORK_STATE which may need
- * special handling on some Android versions. Uses reflection for
- * ConnectivityManager.startTethering() as it's a hidden API.
+ * Note: On Android 11+ (API 30+), hotspot control is restricted for non-system apps.
+ * Uses startLocalOnlyHotspot for modern Android, reflection for legacy APIs.
+ * WifiConfiguration references use reflection as the class was removed from SDK 30+.
  */
 public class WifiHotspotAPI implements IApiModule {
 
@@ -50,119 +52,95 @@ public class WifiHotspotAPI implements IApiModule {
         }
     }
 
-    /**
-     * Enable WiFi hotspot via WifiManager.setWifiApEnabled() (legacy)
-     * or ConnectivityManager.startTethering() (modern).
-     */
-    @SuppressWarnings("deprecation")
     private String doEnable(Context context, String id, String params) {
         String ssid = CommandDispatcher.extractString(params, "ssid");
         String password = CommandDispatcher.extractString(params, "password");
-        String band = CommandDispatcher.extractString(params, "band"); // "2.4", "5"
-        int timeout = CommandDispatcher.extractInt(params, "timeout", 0); // 0 = permanent
+        String band = CommandDispatcher.extractString(params, "band");
+        int timeout = CommandDispatcher.extractInt(params, "timeout", 0);
 
-        if (ssid == null || ssid.isEmpty()) {
-            ssid = "TermuxHotspot";
-        }
+        if (ssid == null || ssid.isEmpty()) ssid = "TermuxHotspot";
 
-        WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
 
         try {
-            // Try modern approach first (Android 11+)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                return enableModern(context, id, ssid, password, band);
+                return enableLocalOnly(context, id, ssid, wm);
+            } else {
+                return enableLegacy(id, ssid, password, band, wm);
             }
+        } catch (Exception e) {
+            return CommandDispatcher.buildError(id, "HOTSPOT_ENABLE_FAILED",
+                    "Failed: " + e.getMessage());
+        }
+    }
 
-            // Legacy approach: WifiManager.setWifiApEnabled via reflection
-            WifiConfiguration config = new WifiConfiguration();
-            config.SSID = ssid;
-            config.allowedAuthAlgorithms.set(WifiConfiguration.AuthAlgorithm.OPEN);
+    /**
+     * API 30+: Use startLocalOnlyHotspot for local-only AP.
+     * Custom SSID/password requires system permissions.
+     */
+    private String enableLocalOnly(Context context, String id, String ssid, WifiManager wm) {
+        wm.startLocalOnlyHotspot(new WifiManager.LocalOnlyHotspotCallback() {
+            @Override
+            public void onStarted(WifiManager.LocalOnlyHotspotReservation reservation) {}
+            @Override
+            public void onStopped(int reason) {}
+            @Override
+            public void onFailed(int reason) {}
+        }, null);
+
+        return CommandDispatcher.buildResponse(id,
+            "{\"ssid\":\"" + PermissionManager.escapeJson(ssid) + "\","
+          + "\"method\":\"LocalOnlyHotspot\","
+          + "\"message\":\"Local-only hotspot requested. Custom SSID/password requires system permissions on Android 11+.\"}");
+    }
+
+    /**
+     * Legacy: Use reflection for WifiManager.setWifiApEnabled with WifiConfiguration.
+     * WifiConfiguration was removed from SDK 30+ so we can't reference it directly.
+     */
+    private String enableLegacy(String id, String ssid, String password, String band, WifiManager wm) {
+        try {
+            Class<?> wcClass = Class.forName("android.net.wifi.WifiConfiguration");
+            Object config = wcClass.newInstance();
+
+            wcClass.getField("SSID").set(config, ssid);
 
             if (password != null && password.length() >= 8) {
-                config.preSharedKey = "\"" + password + "\"";
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.WPA2_PSK);
+                wcClass.getField("preSharedKey").set(config, "\"" + password + "\"");
+                Class<?> kmClass = Class.forName("android.net.wifi.WifiConfiguration$KeyMgmt");
+                Object wpa2psk = kmClass.getField("WPA2_PSK").get(null);
+                Object allowedKM = wcClass.getField("allowedKeyManagement").get(config);
+                allowedKM.getClass().getMethod("set", int.class).invoke(allowedKM, wpa2psk);
             } else {
-                config.allowedKeyManagement.set(WifiConfiguration.KeyMgmt.NONE);
+                Class<?> kmClass = Class.forName("android.net.wifi.WifiConfiguration$KeyMgmt");
+                Object none = kmClass.getField("NONE").get(null);
+                Object allowedKM = wcClass.getField("allowedKeyManagement").get(config);
+                allowedKM.getClass().getMethod("set", int.class).invoke(allowedKM, none);
             }
 
-            // Try to set band via reflection
-            if ("5".equals(band)) {
-                try {
-                    config.apBand = WifiConfiguration.AP_BAND_5GHZ;
-                } catch (Exception e) {
-                    // apBand may not be available
-                }
-            }
-
-            Method setWifiApEnabled = wm.getClass().getMethod(
-                    "setWifiApEnabled", WifiConfiguration.class, boolean.class);
+            Method setWifiApEnabled = wm.getClass().getMethod("setWifiApEnabled", wcClass, boolean.class);
             setWifiApEnabled.invoke(wm, config, true);
 
             return CommandDispatcher.buildResponse(id,
                 "{\"ssid\":\"" + PermissionManager.escapeJson(ssid) + "\","
               + "\"band\":\"" + (band != null ? band : "2.4") + "\","
-              + "\"encrypted\":" + (password != null && password.length() >= 8) + ","
               + "\"method\":\"reflection\","
-              + "\"message\":\"Hotspot enabling (may take a few seconds)\"}");
-
+              + "\"message\":\"Hotspot enabling via legacy API\"}");
         } catch (Exception e) {
             return CommandDispatcher.buildError(id, "HOTSPOT_ENABLE_FAILED",
-                    "Failed to enable hotspot: " + e.getMessage());
+                    "Legacy hotspot failed: " + e.getMessage());
         }
     }
 
-    /**
-     * Modern approach using ConnectivityManager.startTethering().
-     * Uses reflection as the API is hidden.
-     */
-    private String enableModern(Context context, String id, String ssid,
-                                String password, String band) {
-        try {
-            Object connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE);
-            Class<?> cmClass = connectivityManager.getClass();
-
-            Method startTethering = cmClass.getMethod(
-                    "startTethering", int.class, boolean.class,
-                    android.net.ConnectivityManager.OnStartTetheringCallback.class);
-
-            // Use a simple callback
-            startTethering.invoke(connectivityManager,
-                    0, // TETHERING_WIFI
-                    false,
-                    new android.net.ConnectivityManager.OnStartTetheringCallback() {
-                        @Override
-                        public void onTetheringStarted() {}
-                        @Override
-                        public void onTetheringFailed() {}
-                    });
-
-            return CommandDispatcher.buildResponse(id,
-                "{\"ssid\":\"" + PermissionManager.escapeJson(ssid) + "\","
-              + "\"method\":\"ConnectivityManager\","
-              + "\"message\":\"Hotspot enabling via ConnectivityManager\"}");
-
-        } catch (Exception e) {
-            return CommandDispatcher.buildError(id, "HOTSPOT_ENABLE_FAILED",
-                    "Modern tethering failed: " + e.getMessage()
-                    + ". Try enabling hotspot from Settings first.");
-        }
-    }
-
-    /**
-     * Disable WiFi hotspot.
-     */
-    @SuppressWarnings("deprecation")
     private String doDisable(Context context, String id) {
-        WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                // Modern: stopTethering
-                Object cm = context.getSystemService(Context.CONNECTIVITY_CLASS);
+                Object cm = context.getSystemService(Context.CONNECTIVITY_SERVICE);
                 cm.getClass().getMethod("stopTethering", int.class).invoke(cm, 0);
             } else {
-                // Legacy: setWifiApEnabled(null, false)
-                Method setWifiApEnabled = wm.getClass().getMethod(
-                        "setWifiApEnabled", WifiConfiguration.class, boolean.class);
+                Class<?> wcClass = Class.forName("android.net.wifi.WifiConfiguration");
+                Method setWifiApEnabled = wm.getClass().getMethod("setWifiApEnabled", wcClass, boolean.class);
                 setWifiApEnabled.invoke(wm, null, false);
             }
 
@@ -173,16 +151,11 @@ public class WifiHotspotAPI implements IApiModule {
         }
     }
 
-    /**
-     * Get hotspot status.
-     */
-    @SuppressWarnings("deprecation")
     private String doStatus(Context context, String id) {
-        WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+        WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
         try {
             Method isWifiApEnabled = wm.getClass().getMethod("isWifiApEnabled");
             boolean enabled = (Boolean) isWifiApEnabled.invoke(wm);
-
             Method getWifiApState = wm.getClass().getMethod("getWifiApState");
             int state = (Integer) getWifiApState.invoke(wm);
 
@@ -196,51 +169,46 @@ public class WifiHotspotAPI implements IApiModule {
                 default: stateStr = "unknown(" + state + ")"; break;
             }
 
-            // Get hotspot configuration
-            Method getWifiApConfiguration = wm.getClass().getMethod("getWifiApConfiguration");
-            WifiConfiguration config = (WifiConfiguration) getWifiApConfiguration.invoke(wm);
-
             String configJson = "null";
-            if (config != null) {
-                configJson = "{"
-                    + "\"ssid\":\"" + PermissionManager.escapeJson(
-                            config.SSID != null ? config.SSID.replace("\"","") : "unknown") + "\""
-                    + "}";
-            }
+            try {
+                Method getWifiApConfiguration = wm.getClass().getMethod("getWifiApConfiguration");
+                Object config = getWifiApConfiguration.invoke(wm);
+                if (config != null) {
+                    String configSsid = (String) config.getClass().getField("SSID").get(config);
+                    configJson = "{\"ssid\":\"" + PermissionManager.escapeJson(
+                            configSsid != null ? configSsid.replace("\"", "") : "unknown") + "\"}";
+                }
+            } catch (Exception ignored) {}
 
             return CommandDispatcher.buildResponse(id,
                 "{\"enabled\":" + enabled + ","
               + "\"state\":\"" + stateStr + "\","
               + "\"configuration\":" + configJson + "}");
-
         } catch (Exception e) {
             return CommandDispatcher.buildError(id, "HOTSPOT_STATUS_FAILED", e.getMessage());
         }
     }
 
-    /**
-     * List clients connected to hotspot.
-     * Uses reflection on WifiManager.getClientList() or similar.
-     */
     private String doClients(Context context, String id) {
         try {
-            WifiManager wm = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+            WifiManager wm = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
 
-            // Try getClientMacList (available on some ROMs)
             try {
                 Method getClientList = wm.getClass().getMethod("getClientMacList");
                 @SuppressWarnings("unchecked")
-                java.util.List<android.net.wifi.WifiClient> clients =
-                        (java.util.List<android.net.wifi.WifiClient>) getClientList.invoke(wm);
+                java.util.List<Object> clients = (java.util.List<Object>) getClientList.invoke(wm);
 
                 StringBuilder sb = new StringBuilder("[");
                 boolean first = true;
-                for (android.net.wifi.WifiClient client : clients) {
+                for (Object client : clients) {
                     if (!first) sb.append(",");
                     first = false;
-                    sb.append("{\"mac_address\":\"")
-                      .append(PermissionManager.escapeJson(client.getMacAddress().toString()))
-                      .append("\"}");
+                    try {
+                        Object mac = client.getClass().getMethod("getMacAddress").invoke(client);
+                        sb.append("{\"mac_address\":\"").append(PermissionManager.escapeJson(mac.toString())).append("\"}");
+                    } catch (Exception e2) {
+                        sb.append("{\"mac_address\":\"unknown\"}");
+                    }
                 }
                 sb.append("]");
 
@@ -248,12 +216,11 @@ public class WifiHotspotAPI implements IApiModule {
                     "{\"clients\":" + sb.toString() + ","
                   + "\"count\":" + clients.size() + "}");
             } catch (NoSuchMethodException e) {
-                // Try DHCP lease info as fallback
                 DhcpInfo dhcp = wm.getDhcpInfo();
                 return CommandDispatcher.buildResponse(id,
                     "{\"clients\":[],"
                   + "\"count\":0,"
-                  + "\"note\":\"Client listing not available on this ROM. DHCP info available.\"}");
+                  + "\"note\":\"Client listing not available on this ROM.\"}");
             }
         } catch (Exception e) {
             return CommandDispatcher.buildError(id, "CLIENTS_FAILED", e.getMessage());

@@ -119,7 +119,6 @@ public class WifiDirectAPI implements IApiModule {
 
         android.net.wifi.p2p.WifiP2pConfig config = new android.net.wifi.p2p.WifiP2pConfig();
         config.deviceAddress = deviceAddress;
-        config.wps.setup = android.net.wifi.p2p.WifiP2pConfig.WPS_PBC;
 
         manager.connect(channel, config, new WifiP2pManager.ActionListener() {
             @Override

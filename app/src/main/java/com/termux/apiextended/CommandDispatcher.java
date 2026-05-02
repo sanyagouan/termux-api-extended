@@ -113,7 +113,7 @@ public final class CommandDispatcher {
     /**
      * Extract a string value from a JSON object by key.
      */
-    static String extractString(String json, String key) {
+    public static String extractString(String json, String key) {
         String search = "\"" + key + "\":\"";
         int start = json.indexOf(search);
         if (start < 0) {
@@ -141,7 +141,7 @@ public final class CommandDispatcher {
     /**
      * Extract a JSON object by key (returns raw substring).
      */
-    static String extractObject(String json, String key) {
+    public static String extractObject(String json, String key) {
         String search = "\"" + key + "\":";
         int start = json.indexOf(search);
         if (start < 0) return "{}";
@@ -176,7 +176,7 @@ public final class CommandDispatcher {
     /**
      * Extract an integer value from JSON by key.
      */
-    static int extractInt(String json, String key, int defaultValue) {
+    public static int extractInt(String json, String key, int defaultValue) {
         String s = extractString(json, key);
         if (s == null) {
             // Try numeric format
@@ -204,7 +204,7 @@ public final class CommandDispatcher {
     /**
      * Extract a boolean value from JSON by key.
      */
-    static boolean extractBoolean(String json, String key, boolean defaultValue) {
+    public static boolean extractBoolean(String json, String key, boolean defaultValue) {
         String s = extractString(json, key);
         if (s == null) {
             String search = "\"" + key + "\":";
@@ -219,7 +219,7 @@ public final class CommandDispatcher {
         return Boolean.parseBoolean(s);
     }
 
-    static String unescapeJson(String s) {
+    public static String unescapeJson(String s) {
         return s.replace("\\\"", "\"")
                 .replace("\\\\", "\\")
                 .replace("\\n", "\n")
